@@ -13,6 +13,7 @@ outpath=$5
 tumorname=$6
 normalname=$7
 xomic=$8  # "RNA" or "DNA"
+species=$9 # "mus_musculus" or "homo_sapiens"
 
 if [ -z "${xomic}" ]; then
     echo "paragram exited \
@@ -27,28 +28,28 @@ else
     echo tumorname="$tumorname"
     echo normalname="$normalname"
     echo xomic="$xomic"
-    
+    echo species=$species
 fi
 
 ###################################################################
 #########         config                              #############
 ###################################################################
-fasp=/mnt/data2/wuzengding/03.biotools/software/fastp
-STAR=/mnt/data2/wuzengding/03.biotools/miniconda3/bin/STAR
-genomedir=/mnt/data2/wuzengding/00.database/15.index_mouse_genome/index_GRCm39_ensemble107.star
-bwa=/mnt/data2/wuzengding/03.biotools/software/bwa/bwa
-index_bwa=/mnt/data2/wuzengding/00.database/15.index_mouse_genome/index_GRCm39_ensemble107.bwa/index_Mus_musculus.GRCm39.dna.primary_assembly_ensemble107
-sambamba=/mnt/data2/wuzengding/03.biotools/miniconda3/bin/sambamba
-VarDict=/mnt/data2/wuzengding/03.biotools/software/VarDictJava/build/libs/VarDict-1.8.3.jar
-geneome=/mnt/data2/wuzengding/00.database/15.index_mouse_genome/Mus_musculus.GRCm39.dna.primary_assembly.fa
-bedfile=/mnt/data2/wuzengding/00.database/16.annot_mouse/Mus_musculus.GRCm39.107.bed
-testsomaticR=/mnt/data2/wuzengding/03.biotools/software/VarDictJava/VarDict/testsomatic.R
-var2vcf_pairedpl=/mnt/data2/wuzengding/03.biotools/software/VarDictJava/VarDict/var2vcf_paired.pl
-SnpSift=/mnt/data2/wuzengding/03.biotools/software/snpEff/SnpSift.jar
-vepCacheDir=/mnt/data2/wuzengding/03.biotools/software/ensembl-vep/vep_data
-vepPlugins=/mnt/data2/wuzengding/03.biotools/software/ensembl-vep/vep_data/Plugins
-userid=1004
-groupid=1004
+fasp=/usr/local/bin/fastp
+STAR=/usr/local/bin/STAR
+genomedir=/opt/00.database/15.index_mouse_genome/index_GRCm39_ensemble107.star
+bwa=/usr/local/bin/bwa
+index_bwa=/opt/00.database/15.index_mouse_genome/index_GRCm39_ensemble107.bwa/index_Mus_musculus.GRCm39.dna.primary_assembly_ensemble107
+sambamba=/usr/local/bin/sambamba
+VarDict=/usr/local/bin/VarDict.jar
+geneome=/opt/00.database/15.index_mouse_genome/Mus_musculus.GRCm39.dna.primary_assembly.fa
+bedfile=/opt/00.database/16.annot_mouse/Mus_musculus.GRCm39.107.bed
+testsomaticR=/usr/local/bin/testsomatic.R
+var2vcf_pairedpl=/usr/local/bin/var2vcf_paired.pl
+SnpSift=/usr/local/bin/SnpSift.jar
+vepCacheDir=/mnt/user/wzd/00.database/21.ensemble_vep
+#vepPlugins=/mnt/user/wzd/00.database/21.ensemble_vep
+#userid=1004
+#groupid=1004
 
 
 if false;then
@@ -137,6 +138,7 @@ elif [ $xomic = "DNA" ];then
     ${sambamba} index -t 20 ${outpath}/${normalname}/02.Aln/${normalname}.BWA.aligned.bam  > ${outpath}/${normalname}/02.Aln/${normalname}.BWA.aligned.sorted.bam.bai
 fi
 
+fi # start runnning
 ###################################################################
 ###########   step4  SNV calling                      #############
 ###################################################################
@@ -151,8 +153,8 @@ fi
 ###########   step5  VEP annotation for vcf           #############
 ###################################################################
 
-docker run --rm -v ${vepCacheDir}:/opt/vep/cache -v ${outpath}/${tumorname}/03.SNV:/temp/03.SNV:Z  -v ${vepPlugins}:/opt/vepPlugins --user ${userid}:${groupid} ensemblorg/ensembl-vep  vep  --force_overwrite  --fork 20 --input_file  /temp/03.SNV/${tumorname}.vardict.vcf --output_file  /temp/03.SNV/${tumorname}.vardict.vep.vcf --format vcf --vcf --symbol --species mus_musculus  --terms SO --tsl --offline --cache  --dir_cache /opt/vep/cache  --plugin Frameshift --plugin Wildtype  --dir_plugins /opt/vepPlugins
-
+#docker run --rm -v ${vepCacheDir}:/opt/vep/cache -v ${outpath}/${tumorname}/03.SNV:/temp/03.SNV:Z  -v ${vepPlugins}:/opt/vepPlugins --user ${userid}:${groupid} ensemblorg/ensembl-vep  vep  --force_overwrite  --fork 20 --input_file  /temp/03.SNV/${tumorname}.vardict.vcf --output_file  /temp/03.SNV/${tumorname}.vardict.vep.vcf --format vcf --vcf --symbol --species mus_musculus  --terms SO --tsl --offline --cache  --dir_cache /opt/vep/cache  --plugin Frameshift --plugin Wildtype  --dir_plugins /opt/vepPlugins
+docker run --rm -v ${vepCacheDir}:/data -v ${vepCacheDir}://.vep  -v ${outpath}/${tumorname}/03.SNV:/temp/03.SNV:Z   --user $(id -u):$(id -g) ensemblorg/ensembl-vep  vep  --force_overwrite  --fork 20 --input_file  /temp/03.SNV/${tumorname}.vardict.vcf --output_file  /temp/03.SNV/${tumorname}.vardict.vep.vcf --format vcf --vcf --symbol --species ${species}  --terms SO --tsl --offline --cache  --dir_cache /opt/vep/cache  --plugin Frameshift --plugin Wildtype  --dir_plugins /opt/vepPlugins
 
 ###################################################################
 #########     step6   somatic and AF filter           #############
@@ -162,11 +164,11 @@ docker run --rm -v ${vepCacheDir}:/opt/vep/cache -v ${outpath}/${tumorname}/03.S
 ###################################################################
 ###########   step7  neoantigen prediction            #############
 ###################################################################
-fi # start runnning
 
-docker run  --rm -v ${outpath}/${tumorname}:/tmp/${tumorname} --user ${userid}:${groupid}  griffithlab/pvactools pvacseq run  --n-threads 25 --iedb-install-directory /opt/iedb --allele-specific-binding-thresholds --keep-tmp-files  --minimum-fold-change 1 /tmp/${tumorname}/03.SNV/${tumorname}.vardict.vep.somatic.vcf   ${tumorname} H-2-Kb,H-2-Db,H2-IAb  NetMHCIIpan NetMHCpan /tmp/${tumorname}/05.AntigenPrediction  -e1 8,9,10,11 -e2 15 
 
-docker run --rm -v ${outpath}/${tumorname}/05.AntigenPrediction/combined:/tmp/combined  --user ${userid}:${groupid}  griffithlab/pvactools pvacseq generate_aggregated_report /tmp/combined/${tumorname}.filtered.tsv /tmp/combined/${tumorname}.filtered.temp.tsv
+docker run  --rm -v ${outpath}/${tumorname}:/tmp/${tumorname} --user $(id -u):$(id -g)  griffithlab/pvactools pvacseq run  --n-threads 25 --iedb-install-directory /opt/iedb --allele-specific-binding-thresholds --keep-tmp-files  --minimum-fold-change 1 /tmp/${tumorname}/03.SNV/${tumorname}.vardict.vep.somatic.vcf   ${tumorname} H-2-Kb,H-2-Db,H2-IAb  NetMHCIIpan NetMHCpan /tmp/${tumorname}/05.AntigenPrediction  -e1 8,9,10,11 -e2 15 
+
+docker run --rm -v ${outpath}/${tumorname}/05.AntigenPrediction/combined:/tmp/combined  --user $(id -u):$(id -g)  griffithlab/pvactools pvacseq generate_aggregated_report /tmp/combined/${tumorname}.filtered.tsv /tmp/combined/${tumorname}.filtered.temp.tsv
 
 head -1 ${outpath}/${tumorname}/05.AntigenPrediction/combined/${tumorname}.filtered.temp.tsv > ${outpath}/${tumorname}/05.AntigenPrediction/combined/${tumorname}.filtered.aggregated.tsv
 tail -n+2  ${outpath}/${tumorname}/05.AntigenPrediction/combined/${tumorname}.filtered.temp.tsv|cut -f4,5|while read line;
